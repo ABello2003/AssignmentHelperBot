@@ -1,0 +1,13 @@
+#Assignment Helper Bot
+
+
+## Features
+- Uses BERT (`bert-base-uncased`) for contextual sentence embeddings
+- Compares prompt sentences to task labels using cosine similarity
+- Provides simple explainability with token occlusion
+- Streamlit interface for quick demos
+
+## Installation
+
+```bash
+pip install -r requirements.txt
