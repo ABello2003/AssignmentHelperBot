@@ -257,5 +257,5 @@ st.sidebar.header("About")
 st.sidebar.write(f"Model: {MODEL_NAME}")
 st.sidebar.write(f"Similarity Threshold: {SIMILARITY_THRESHOLD}")
 st.sidebar.write(
-    "Tip: add more task labels in TASK_LABELS to support more assignment types."
+    
 )
