@@ -3,10 +3,16 @@
 uses BERT to analyze assignment prompts and extract likely tasks.
 
 #Features
-- Uses BERT  for contextual sentence embeddings
-- Compares prompt sentences to task labels 
-- Provides simple explainability with token occlusion
-- Streamlit interface for quick demos
+ -Tkinter desktop GUI 
+-Uses BERT for semantic understanding of text
+-Filters out non-essential or descriptive sentences
+-Extracts  requirements from rubrics
+-Groups instructions into  categories 
+-Produces a clean checklist
+-Improves readability for students
+
 
 # Installation
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+#Run
+python app.py
