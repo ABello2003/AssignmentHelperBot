@@ -62,7 +62,7 @@ _CANDIDATE_LABELS = [BUCKETS[k]["label"] for k in _BUCKET_KEYS]
 class RubricHelperApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Rubric Helper — NLI Classifier")
+        self.root.title("Rubric Helper")
         self.root.geometry("1100x780")
         self.root.configure(bg="#f8f8f8")
 
