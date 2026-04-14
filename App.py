@@ -240,7 +240,7 @@ class RubricHelperApp:
             r"\bdo not have to\b", r"\bdoes not need\b", r"\bneed not\b",
             r"\bnote\b", r"\bsupport\b", r"\ballow\b", r"\brequire\b",
             r"\bproduce\b", r"\bdisplay\b", r"\boutput\b", r"\bupload\b",
-            r"\bturn in\b", r"\bdeadline\b",
+            r"\bturn in\b", r"\bdeadline\b", r"\bdue\b", r"\bby\b", r"\bdate\b",
         ]
         if RubricHelperApp._is_option_def(line):
             return True
