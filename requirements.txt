@@ -1,3 +1,9 @@
-torch
 transformers
+torch
+numpy
 sentencepiece
+pypdf
+numpy<2
+
+
+# Run using .venv\Scripts\python.exe app.py
