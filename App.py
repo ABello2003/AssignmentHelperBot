@@ -136,6 +136,8 @@ class RubricHelperApp:
 
         self.classifier = None
         self.model_ready = False
+        self.placeholder_text = "Paste assignment prompt/rubric here, or click Import PDF..."
+        self.input_placeholder_active = False
 
         self._build_gui()
         threading.Thread(target=self._load_model, daemon=True).start()
@@ -144,13 +146,33 @@ class RubricHelperApp:
 
     def _build_gui(self):
         style = ttk.Style()
-        style.configure("TFrame", background="#f8f8f8")
-        style.configure("TLabel", background="#f8f8f8")
-        style.configure("Bold.TLabel", background="#f8f8f8", font=("Arial", 11, "bold"))
-        style.configure("Title.TLabel", background="#f8f8f8", font=("Arial", 17, "bold"))
-        style.configure("Sub.TLabel", background="#f8f8f8", font=("Arial", 10), foreground="#555")
+        try:
+            style.theme_use("vista")
+        except Exception:
+            style.theme_use("clam")
 
-        main = ttk.Frame(self.root, padding=14)
+        bg = "#f3f6fb"
+        panel_bg = "#ffffff"
+        text_main = "#0f172a"
+        text_muted = "#475569"
+        border = "#dbe3ef"
+        accent = "#2563eb"
+
+        self.root.configure(bg=bg)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg, foreground=text_main)
+        style.configure("Card.TFrame", background=panel_bg, relief="solid", borderwidth=1)
+        style.configure("Legend.TFrame", background=panel_bg, relief="flat", borderwidth=0)
+        style.configure("Bold.TLabel", background=bg, foreground=text_main, font=("Segoe UI", 11, "bold"))
+        style.configure("Title.TLabel", background=bg, foreground=text_main, font=("Segoe UI", 20, "bold"))
+        style.configure("Sub.TLabel", background=bg, foreground=text_muted, font=("Segoe UI", 10))
+        style.configure("CardTitle.TLabel", background=panel_bg, foreground=text_main, font=("Segoe UI", 11, "bold"))
+        style.configure("CardSub.TLabel", background=panel_bg, foreground=text_muted, font=("Segoe UI", 10))
+        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(12, 8))
+        style.configure("TButton", font=("Segoe UI", 10), padding=(10, 7))
+        style.configure("Progress.Horizontal.TProgressbar", troughcolor="#e2e8f0", background=accent, bordercolor="#e2e8f0")
+
+        main = ttk.Frame(self.root, padding=18)
         main.pack(fill="both", expand=True)
 
         ttk.Label(main, text="Rubric Helper", style="Title.TLabel").pack(anchor="w")
@@ -158,67 +180,152 @@ class RubricHelperApp:
             main,
             text=f"Zero-shot NLI classification via {MODEL_NAME}",
             style="Sub.TLabel",
-        ).pack(anchor="w", pady=(2, 10))
+        ).pack(anchor="w", pady=(2, 14))
 
-        #  Input 
-        ttk.Label(main, text="Assignment Prompt / Rubric:", style="Bold.TLabel").pack(anchor="w")
-        self.input_text = scrolledtext.ScrolledText(
-            main, wrap=tk.WORD, height=10, font=("Arial", 11), relief="solid", borderwidth=1
+        paned = ttk.Panedwindow(main, orient=tk.HORIZONTAL)
+        paned.pack(fill="both", expand=True)
+
+        left_panel = ttk.Frame(paned, padding=16, style="Card.TFrame")
+        right_panel = ttk.Frame(paned, padding=16, style="Card.TFrame")
+        paned.add(left_panel, weight=1)
+        paned.add(right_panel, weight=1)
+
+        left_panel.columnconfigure(0, weight=1)
+        left_panel.rowconfigure(2, weight=1)
+        right_panel.columnconfigure(0, weight=1)
+        right_panel.rowconfigure(2, weight=1)
+
+        #  Input (grid so text box lines up with results box)
+        ttk.Label(left_panel, text="Assignment Prompt / Rubric", style="CardTitle.TLabel").grid(
+            row=0, column=0, sticky="w"
         )
-        self.input_text.pack(fill="x", pady=(4, 8))
+        ttk.Label(
+            left_panel,
+            text="Paste text directly, or import a PDF with selectable text.",
+            style="CardSub.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 8))
+        self.input_text = scrolledtext.ScrolledText(
+            left_panel,
+            wrap=tk.WORD,
+            height=20,
+            font=("Segoe UI", 11),
+            relief="flat",
+            borderwidth=1,
+            bg="#fbfdff",
+            fg=text_main,
+            insertbackground=text_main,
+            highlightthickness=1,
+            highlightbackground=border,
+            highlightcolor=accent,
+            padx=10,
+            pady=10,
+        )
+        self.input_text.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
+        self.input_text.bind("<FocusIn>", self._clear_placeholder)
+        self.input_text.bind("<FocusOut>", self._restore_placeholder_if_empty)
+        self._set_placeholder()
 
-        #  Buttons 
-        btn_row = ttk.Frame(main)
-        btn_row.pack(fill="x", pady=(0, 8))
+        #  Buttons
+        btn_row = ttk.Frame(left_panel)
+        btn_row.grid(row=3, column=0, sticky="ew")
 
-        self.analyze_btn = ttk.Button(btn_row, text="Analyze", command=self._on_analyze)
+        self.analyze_btn = ttk.Button(
+            btn_row, text="Analyze Requirements", command=self._on_analyze, style="Primary.TButton"
+        )
         self.analyze_btn.pack(side="left")
         self.analyze_btn.state(["disabled"])
 
-        # PDF upload button
-        self.pdf_btn = ttk.Button(btn_row, text="Upload PDF", command=self._upload_pdf)
+        self.pdf_btn = ttk.Button(btn_row, text="Import PDF", command=self._upload_pdf)
         self.pdf_btn.pack(side="left", padx=8)
 
-        ttk.Button(btn_row, text="Clear", command=self._clear).pack(side="left")
+        ttk.Button(btn_row, text="Clear All", command=self._clear).pack(side="left")
 
-        self.status_var = tk.StringVar(value="Loading NLI model…")
-        ttk.Label(btn_row, textvariable=self.status_var, style="Sub.TLabel").pack(
-            side="left", padx=12
+        #  Results (mirror left column: title, helper row, text, buttons)
+        ttk.Label(right_panel, text="Extracted Requirements", style="CardTitle.TLabel").grid(
+            row=0, column=0, sticky="w"
         )
-
-        # Legend 
-        legend = ttk.Frame(main)
-        legend.pack(anchor="w", pady=(0, 6))
+        legend = ttk.Frame(right_panel, style="Legend.TFrame")
+        legend.grid(row=1, column=0, sticky="w", pady=(0, 8))
         for key, meta in BUCKETS.items():
-            tk.Label(legend, text="●", fg=meta["color"], bg="#f8f8f8", font=("Arial", 12)).pack(side="left")
-            tk.Label(legend, text=meta["display"] + "  ", bg="#f8f8f8", font=("Arial", 9)).pack(side="left")
+            tk.Label(
+                legend,
+                text="●",
+                fg=meta["color"],
+                bg=panel_bg,
+                font=("Segoe UI", 12),
+                bd=0,
+                highlightthickness=0,
+                relief="flat",
+            ).pack(side="left")
+            tk.Label(
+                legend,
+                text=meta["display"] + "  ",
+                bg=panel_bg,
+                fg=text_muted,
+                font=("Segoe UI", 9),
+                bd=0,
+                highlightthickness=0,
+                relief="flat",
+            ).pack(side="left")
 
-        #  Results 
-        ttk.Label(main, text="Extracted Requirements:", style="Bold.TLabel").pack(anchor="w")
         self.results_text = scrolledtext.ScrolledText(
-            main,
+            right_panel,
             wrap=tk.WORD,
-            height=18,
-            font=("Courier New", 11),
-            relief="solid",
+            height=20,
+            font=("Consolas", 10),
+            relief="flat",
             borderwidth=1,
+            bg="#f8fafc",
+            fg=text_main,
+            insertbackground=text_main,
+            highlightthickness=1,
+            highlightbackground=border,
+            highlightcolor=accent,
+            padx=10,
+            pady=10,
             state="disabled",
         )
-        self.results_text.pack(fill="both", expand=True, pady=(4, 0))
+        self.results_text.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
+
+        results_btn_row = ttk.Frame(right_panel)
+        results_btn_row.grid(row=3, column=0, sticky="ew")
+        ttk.Button(results_btn_row, text="Copy Text", command=self._copy_results).pack(side="left")
+        ttk.Button(results_btn_row, text="Save File", command=self._save_results).pack(side="left", padx=8)
+
+        # Shared footer so both panels keep the same vertical space for text boxes
+        footer = ttk.Frame(main)
+        footer.pack(fill="x", pady=(10, 0))
+        self.progress = ttk.Progressbar(
+            footer,
+            mode="indeterminate",
+            style="Progress.Horizontal.TProgressbar",
+            length=220,
+        )
+        self.progress.pack(fill="x", pady=(0, 6))
+        self.progress.start(10)
+
+        ttk.Label(
+            footer,
+            text="Tip: cleaner rubric text usually gives better classification results.",
+            style="Sub.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.status_var = tk.StringVar(value="Loading NLI model…")
+        ttk.Label(footer, textvariable=self.status_var, style="Sub.TLabel").pack(anchor="w")
 
         for key, meta in BUCKETS.items():
             self.results_text.tag_config(f"header_{key}", foreground=meta["color"],
-                                         font=("Arial", 11, "bold"))
-            self.results_text.tag_config(f"item_{key}", foreground="#1a1a1a",
-                                         font=("Courier New", 11))
+                                         font=("Segoe UI", 11, "bold"))
+            self.results_text.tag_config(f"item_{key}", foreground=text_main,
+                                         font=("Consolas", 10))
             self.results_text.tag_config(f"conf_{key}", foreground=meta["color"],
-                                         font=("Courier New", 9))
+                                         font=("Consolas", 9))
 
         self.results_text.tag_config("unclassified_header", foreground="#888",
-                                     font=("Arial", 11, "bold"))
+                                     font=("Segoe UI", 11, "bold"))
         self.results_text.tag_config("unclassified_item", foreground="#888",
-                                     font=("Courier New", 11))
-        self.results_text.tag_config("loading", foreground="#555", font=("Arial", 11, "italic"))
+                                     font=("Consolas", 10))
+        self.results_text.tag_config("loading", foreground="#555", font=("Segoe UI", 11, "italic"))
         self.results_text.tag_config("rule", foreground="#ccc")
 
     #  PDF Upload 
@@ -237,7 +344,9 @@ class RubricHelperApp:
             if not text.strip():
                 messagebox.showwarning("Empty PDF", "No readable text found in this PDF. It may be scanned/image-based.")
                 return
+            self.input_placeholder_active = False
             self.input_text.delete("1.0", tk.END)
+            self.input_text.configure(fg="#0f172a")
             self.input_text.insert("1.0", text)
             self._set_status(f"✓ PDF loaded — {len(text.split())} words extracted")
         except Exception as exc:
@@ -349,10 +458,31 @@ class RubricHelperApp:
 
     def _on_model_ready(self):
         self.analyze_btn.state(["!disabled"])
+        self.progress.stop()
         self._set_status(f"✓ {MODEL_NAME} ready")
 
     def _set_status(self, msg: str):
         self.root.after(0, lambda: self.status_var.set(msg))
+
+    def _set_placeholder(self):
+        if self.input_text.get("1.0", tk.END).strip():
+            return
+        self.input_placeholder_active = True
+        self.input_text.insert("1.0", self.placeholder_text)
+        self.input_text.configure(fg="#64748b")
+
+    def _clear_placeholder(self, _event=None):
+        if not self.input_placeholder_active:
+            return
+        self.input_text.delete("1.0", tk.END)
+        self.input_text.configure(fg="#0f172a")
+        self.input_placeholder_active = False
+
+    def _restore_placeholder_if_empty(self, _event=None):
+        if self.input_text.get("1.0", tk.END).strip():
+            return
+        self.input_text.delete("1.0", tk.END)
+        self._set_placeholder()
 
     # NLI Classification 
 
@@ -717,7 +847,7 @@ class RubricHelperApp:
 
     def _on_analyze(self):
         text = self.input_text.get("1.0", tk.END).strip()
-        if not text:
+        if not text or self.input_placeholder_active:
             messagebox.showwarning("Empty Input", "Please paste a rubric or upload a PDF.")
             return
         if not self.model_ready:
@@ -725,6 +855,7 @@ class RubricHelperApp:
             return
 
         self.analyze_btn.state(["disabled"])
+        self.progress.start(10)
 
         self.results_text.configure(state="normal")
         self.results_text.delete("1.0", tk.END)
@@ -741,15 +872,52 @@ class RubricHelperApp:
                 err_msg = str(exc)
                 self.root.after(0, lambda: messagebox.showerror("Error", err_msg))
             finally:
+                self.root.after(0, self.progress.stop)
                 self.root.after(0, lambda: self.analyze_btn.state(["!disabled"]))
 
         threading.Thread(target=run, daemon=True).start()
 
     def _clear(self):
         self.input_text.delete("1.0", tk.END)
+        self.input_text.configure(fg="#0f172a")
+        self.input_placeholder_active = False
+        self._set_placeholder()
         self.results_text.configure(state="normal")
         self.results_text.delete("1.0", tk.END)
         self.results_text.configure(state="disabled")
+
+    def _get_results_content(self) -> str:
+        return self.results_text.get("1.0", tk.END).strip()
+
+    def _copy_results(self):
+        text = self._get_results_content()
+        if not text:
+            messagebox.showinfo("No Results", "There is no extracted text to copy yet.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._set_status("✓ Extracted requirements copied to clipboard")
+
+    def _save_results(self):
+        text = self._get_results_content()
+        if not text:
+            messagebox.showinfo("No Results", "There is no extracted text to save yet.")
+            return
+
+        path = filedialog.asksaveasfilename(
+            title="Save extracted requirements",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text + "\n")
+            self._set_status(f"✓ Saved extracted requirements to {path}")
+        except Exception as exc:
+            messagebox.showerror("Save Error", f"Could not save file:\n{exc}")
 
 
 def main():
