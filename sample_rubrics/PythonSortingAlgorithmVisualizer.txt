@@ -1,0 +1,14 @@
+Develop a Python program that implements and compares sorting algorithms.
+  The program must implement bubble sort, merge sort, and quicksort.            
+  The program must accept a -a flag to specify which algorithm to run.          
+  The program must support a -n flag followed by a number to set the input size.
+  The program must support a -v flag to display each step of the sort.          
+  The output must display the sorted array and the number of comparisons made.  
+  Results must be printed in the order: algorithm name, comparisons, time       
+  elapsed, sorted array.                                                        
+  Each value must be on its own line with no trailing spaces.                   
+  You do not need to implement a graphical visualization.                       
+  You do not need to handle negative numbers or duplicate values.               
+  You may use Python for this assignment. No other languages are allowed.       
+  Submit a single .py file to Canvas by Sunday at 11:59pm.               
+  Late work will not be accepted without prior approval from the instructor.
