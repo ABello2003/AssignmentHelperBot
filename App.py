@@ -31,32 +31,32 @@ CONFIDENCE_THRESHOLD = 0.40
 # Phrasing them as hypothesis statements gets better entailment scores.
 BUCKETS = {
     "main_task": {
-        "label": "write, build, create, develop, or implement a program, application, or system",
+        "label": "the primary deliverable: write, build, create, or implement a program or application",
         "display": "Main Task",
         "color": "#1a56db",
     },
     "output_requirement": {
-        "label": "a requirement about how the program output should look or behave",
+        "label": "a specific requirement about how the program output must be formatted, sorted, or displayed",
         "display": "Output Requirement",
         "color": "#7e3af2",
     },
     "supported_option": {
-        "label": "a command-line option, flag, or feature the program must support",
+        "label": "a command-line flag, option, or argument the program must accept or support",
         "display": "Supported Options / Features",
         "color": "#0694a2",
     },
     "allowed_language": {
-        "label": "which programming languages are allowed or permitted to use",
+        "label": "which programming language or languages are allowed or required for this assignment",
         "display": "Allowed Languages",
         "color": "#057a55",
     },
     "exception_note": {
-        "label": "something that is not required, optional, or explicitly excluded",
+        "label": "something the student does not need to do, an exception, or an optional feature explicitly excluded",
         "display": "Exceptions / Notes",
         "color": "#d97706",
     },
     "submission_requirement": {
-        "label": "submission deadline, due date, when to turn in, upload to Canvas, late penalty, or submission instructions",
+        "label": "when or how to submit the assignment: deadline, due date, upload instructions, or late penalty",
         "display": "Submission",
         "color": "#e02424",
     },
@@ -533,6 +533,8 @@ class RubricHelperApp:
         cleaned = []
         for line in raw:
             line = line.strip(" -•*\t")
+            # Strip leading numbered/lettered list prefixes: "1.", "2)", "(a)", "a."
+            line = re.sub(r'^\s*(\d+[\.\)]\s*|[a-zA-Z][\.\)]\s*|\([a-zA-Z0-9]\)\s*)', '', line).strip()
             if len(line.split()) >= 4:   # drop fragments under 4 words
                 cleaned.append(line)
         return cleaned
@@ -669,8 +671,8 @@ class RubricHelperApp:
             if re.search(p, lowered):
                 return "submission_requirement"
 
-        # 2nd tier Main task signals 
-        # Only  if the line is clearly a positive instruction, not a negation.
+        # Tier 2  Main task signals
+        # Only if the line is clearly a positive instruction, not a negation.
         main_task_signals = [
             r"\bwrite\s+a\b", r"\bwrite\s+an\b",
             r"\bcreate\s+a\b", r"\bcreate\s+an\b",
@@ -679,10 +681,48 @@ class RubricHelperApp:
             r"\bdevelop\s+a\b", r"\bdevelop\s+an\b",
             r"\bprogram\s+that\b", r"\bprogram\s+which\b",
             r"\bapplication\s+that\b",
+            r"\bsimulate\s+a\b", r"\bsimulate\s+an\b",
         ]
         for p in main_task_signals:
             if re.search(p, lowered):
                 return "main_task"
+
+        # Tier 3  Output requirement signals
+        output_signals = [
+            r"\boutput\s+(must|should|needs?\s+to|will)\b",
+            r"\bthe\s+output\s+(must|should|will|needs?\s+to)\b",
+            r"\bprint\s+(the|a|each|all|every|results?|values?|numbers?|list|names?)\b",
+            r"\bdisplay\s+(the|a|each|all|results?|output|values?)\b",
+            r"\bformat\s+of\s+the\s+(output|result)\b",
+            r"\bexact\s+(output|format|same\s+format)\b",
+            r"\bmatch\s+the\s+expected\s+(output|format)\b",
+            r"\bone\s+(result|item|entry|number|value|name)\s+per\s+line\b",
+            r"\bone\s+per\s+line\b",
+            r"\bsorted\s+(in|by)\s+(ascending|descending)\b",
+            r"\bin\s+ascending\s+order\b", r"\bin\s+descending\s+order\b",
+            r"\balphabetical(ly)?\s+order\b",
+            r"\bno\s+trailing\s+(spaces?|newlines?)\b",
+            r"\bfollowed\s+by\s+a\s+newline\b",
+            r"\bseparated\s+by\s+(a\s+)?(space|comma|newline|tab)\b",
+        ]
+        for p in output_signals:
+            if re.search(p, lowered):
+                return "output_requirement"
+
+        # Tier 4  Supported option/feature signals
+        option_signals = [
+            r"\bcommand[\s-]line\s+(argument|flag|option|parameter)s?\b",
+            r"\baccept\s+.{0,30}(flag|option|argument|switch)\b",
+            r"\bsupport\s+(the\s+)?-[a-z]\b",
+            r"\b-[a-z]\s+(flag|option|switch)\b",
+            r"\bargc\b", r"\bargv\b", r"\bgetopt\b",
+            r"\bflag\s+to\b",
+            r"\bverbose\s+(mode|flag|output)\b",
+            r"\b(enable|disable)\s+.{0,20}(flag|option|mode)\b",
+        ]
+        for p in option_signals:
+            if re.search(p, lowered):
+                return "supported_option"
 
         return ""
 
