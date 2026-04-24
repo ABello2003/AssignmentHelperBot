@@ -678,6 +678,7 @@ class RubricHelperApp:
             r"\bcreate\s+a\b", r"\bcreate\s+an\b",
             r"\bbuild\s+a\b", r"\bbuild\s+an\b",
             r"\bimplement\s+a\b", r"\bimplement\s+an\b",
+            r"\bimplement\b",
             r"\bdevelop\s+a\b", r"\bdevelop\s+an\b",
             r"\bprogram\s+that\b", r"\bprogram\s+which\b",
             r"\bapplication\s+that\b",
@@ -687,7 +688,24 @@ class RubricHelperApp:
             if re.search(p, lowered):
                 return "main_task"
 
-        # Tier 3  Output requirement signals
+        # Tier 3  Supported option/feature signals (checked before output so that
+        # flag lines like "support a -v flag to display each step" aren't stolen
+        # by the display/output patterns below)
+        option_signals = [
+            r"\bcommand[\s-]line\s+(argument|flag|option|parameter)s?\b",
+            r"\baccept\s+.{0,30}(flag|option|argument|switch)\b",
+            r"\bsupport\s+(a\s+|an\s+|the\s+)?-[a-z]\b",
+            r"\b-[a-z]\s+(flag|option|switch)\b",
+            r"\bargc\b", r"\bargv\b", r"\bgetopt\b",
+            r"\bflag\s+to\b",
+            r"\bverbose\s+(mode|flag|output)\b",
+            r"\b(enable|disable)\s+.{0,20}(flag|option|mode)\b",
+        ]
+        for p in option_signals:
+            if re.search(p, lowered):
+                return "supported_option"
+
+        # Tier 4  Output requirement signals
         output_signals = [
             r"\boutput\s+(must|should|needs?\s+to|will)\b",
             r"\bthe\s+output\s+(must|should|will|needs?\s+to)\b",
@@ -695,6 +713,7 @@ class RubricHelperApp:
             r"\bdisplay\s+(the|a|each|all|results?|output|values?)\b",
             r"\bformat\s+of\s+the\s+(output|result)\b",
             r"\bexact\s+(output|format|same\s+format)\b",
+            r"\bmatch\s+exactly\b",
             r"\bmatch\s+the\s+expected\s+(output|format)\b",
             r"\bone\s+(result|item|entry|number|value|name)\s+per\s+line\b",
             r"\bone\s+per\s+line\b",
@@ -708,21 +727,6 @@ class RubricHelperApp:
         for p in output_signals:
             if re.search(p, lowered):
                 return "output_requirement"
-
-        # Tier 4  Supported option/feature signals
-        option_signals = [
-            r"\bcommand[\s-]line\s+(argument|flag|option|parameter)s?\b",
-            r"\baccept\s+.{0,30}(flag|option|argument|switch)\b",
-            r"\bsupport\s+(the\s+)?-[a-z]\b",
-            r"\b-[a-z]\s+(flag|option|switch)\b",
-            r"\bargc\b", r"\bargv\b", r"\bgetopt\b",
-            r"\bflag\s+to\b",
-            r"\bverbose\s+(mode|flag|output)\b",
-            r"\b(enable|disable)\s+.{0,20}(flag|option|mode)\b",
-        ]
-        for p in option_signals:
-            if re.search(p, lowered):
-                return "supported_option"
 
         return ""
 
