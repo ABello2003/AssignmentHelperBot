@@ -7,12 +7,12 @@ A desktop app that analyzes assignment prompts and rubrics using zero-shot NLI (
 - **Zero-shot NLI classification** via `cross-encoder/nli-deberta-v3-small`                                                   
 - **PDF import** — load rubrics directly from PDF files with selectable text
 - **6 requirement categories:**
-- Main Task
-- Output Requirements
-- Supported Options / Features
-- Allowed Languages
-- Exceptions / Notes
-- Submission
+  - Main Task
+  - Output Requirements
+  - Supported Options / Features
+  - Allowed Languages
+  - Exceptions / Notes
+  - Submission
 - **Confidence scores** shown for each classified line
 - **Rule-based pre-classifier** for high-confidence lines (flags, deadlines, exceptions) to skip NLI and improve speed and accuracy
 - **Copy Text / Save File** — export extracted requirements
