@@ -268,29 +268,37 @@ class RubricHelperApp:
                 relief="flat",
             ).pack(side="left")
 
-        self.results_text = scrolledtext.ScrolledText(
-            right_panel,
-            wrap=tk.WORD,
-            height=20,
-            font=("Consolas", 10),
-            relief="flat",
-            borderwidth=1,
-            bg="#f8fafc",
-            fg=text_main,
-            insertbackground=text_main,
-            highlightthickness=1,
-            highlightbackground=border,
-            highlightcolor=accent,
-            padx=10,
-            pady=10,
-            state="disabled",
-        )
-        self.results_text.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
+        results_outer = tk.Frame(right_panel, bg=border)
+        results_outer.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
+        results_outer.columnconfigure(0, weight=1)
+        results_outer.rowconfigure(0, weight=1)
+
+        self.results_canvas = tk.Canvas(results_outer, bg="#f8fafc", highlightthickness=0)
+        results_vscroll = ttk.Scrollbar(results_outer, orient="vertical", command=self.results_canvas.yview)
+        self.results_canvas.configure(yscrollcommand=results_vscroll.set)
+        self.results_canvas.grid(row=0, column=0, sticky="nsew")
+        results_vscroll.grid(row=0, column=1, sticky="ns")
+
+        self.checklist_frame = tk.Frame(self.results_canvas, bg="#f8fafc")
+        self._checklist_window = self.results_canvas.create_window((0, 0), window=self.checklist_frame, anchor="nw")
+        self.checklist_frame.bind("<Configure>", self._on_checklist_configure)
+        self.results_canvas.bind("<Configure>", self._on_canvas_configure)
+        self.results_canvas.bind("<MouseWheel>", self._on_mousewheel)
+
+        self.check_vars: list = []
+        self._result_items: list = []
+
+        self.progress_var = tk.StringVar(value="")
+        tk.Label(
+            right_panel, textvariable=self.progress_var,
+            bg=panel_bg, fg=text_muted, font=("Segoe UI", 10), anchor="w",
+        ).grid(row=3, column=0, sticky="w", pady=(0, 4))
 
         results_btn_row = ttk.Frame(right_panel)
-        results_btn_row.grid(row=3, column=0, sticky="ew")
+        results_btn_row.grid(row=4, column=0, sticky="ew")
         ttk.Button(results_btn_row, text="Copy Text", command=self._copy_results).pack(side="left")
         ttk.Button(results_btn_row, text="Save File", command=self._save_results).pack(side="left", padx=8)
+        ttk.Button(results_btn_row, text="Clear Checks", command=self._clear_checks).pack(side="left")
 
         # Shared footer so both panels keep the same vertical space for text boxes
         footer = ttk.Frame(main)
@@ -313,22 +321,30 @@ class RubricHelperApp:
         self.status_var = tk.StringVar(value="Loading NLI model…")
         ttk.Label(footer, textvariable=self.status_var, style="Sub.TLabel").pack(anchor="w")
 
-        for key, meta in BUCKETS.items():
-            self.results_text.tag_config(f"header_{key}", foreground=meta["color"],
-                                         font=("Segoe UI", 11, "bold"))
-            self.results_text.tag_config(f"item_{key}", foreground=text_main,
-                                         font=("Consolas", 10))
-            self.results_text.tag_config(f"conf_{key}", foreground=meta["color"],
-                                         font=("Consolas", 9))
+    #  Checklist scroll helpers
 
-        self.results_text.tag_config("unclassified_header", foreground="#888",
-                                     font=("Segoe UI", 11, "bold"))
-        self.results_text.tag_config("unclassified_item", foreground="#888",
-                                     font=("Consolas", 10))
-        self.results_text.tag_config("loading", foreground="#555", font=("Segoe UI", 11, "italic"))
-        self.results_text.tag_config("rule", foreground="#ccc")
+    def _on_checklist_configure(self, _event=None):
+        self.results_canvas.configure(scrollregion=self.results_canvas.bbox("all"))
 
-    #  PDF Upload 
+    def _on_canvas_configure(self, event):
+        self.results_canvas.itemconfig(self._checklist_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        self.results_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _update_progress(self, *_):
+        if not self.check_vars:
+            self.progress_var.set("")
+            return
+        checked = sum(1 for var, _, _ in self.check_vars if var.get())
+        total = len(self.check_vars)
+        self.progress_var.set(f"{checked} / {total} completed")
+
+    def _clear_checks(self):
+        for var, _, _ in self.check_vars:
+            var.set(False)
+
+    #  PDF Upload
 
     def _upload_pdf(self):
         """Open a file dialog, extract text from the chosen PDF, and load it into the input box."""
@@ -808,19 +824,25 @@ class RubricHelperApp:
     #  Rendering 
 
     def _render(self, buckets: Dict, languages: Set[str]):
-        self.results_text.configure(state="normal")
-        self.results_text.delete("1.0", tk.END)
+        for w in self.checklist_frame.winfo_children():
+            w.destroy()
+        self.check_vars = []
+        self._result_items = []
 
-        any_output = False
+        bg = "#f8fafc"
+        text_main = "#0f172a"
+
         order = [
             "main_task", "output_requirement", "supported_option",
             "allowed_language", "exception_note", "submission_requirement",
         ]
 
+        tk.Frame(self.checklist_frame, bg=bg, height=6).pack(fill="x")
+
+        any_output = False
         for key in order:
             items = list(buckets.get(key, []))
 
-            # Merge language detections into one clean summary line
             if key == "allowed_language" and languages:
                 lang_line = "Allowed languages: " + ", ".join(sorted(languages))
                 conf = max((i["confidence"] for i in items), default=1.0)
@@ -831,8 +853,11 @@ class RubricHelperApp:
 
             any_output = True
             meta = BUCKETS[key]
-            self.results_text.insert(tk.END, f"\n{meta['display']}\n", f"header_{key}")
-            self.results_text.insert(tk.END, "─" * 52 + "\n", "rule")
+
+            tk.Label(self.checklist_frame, text=meta["display"], fg=meta["color"],
+                     bg=bg, font=("Segoe UI", 11, "bold"), anchor="w").pack(
+                fill="x", padx=12, pady=(10, 0))
+            tk.Frame(self.checklist_frame, bg="#dbe3ef", height=1).pack(fill="x", padx=12, pady=(2, 4))
 
             for item in items:
                 is_rule = item.get("is_rule_based", False)
@@ -840,47 +865,84 @@ class RubricHelperApp:
                 conf_label = "[rule]" if is_rule else f"[{pct:3d}%]"
                 bar = "" if is_rule else "  " + self._conf_bar(item["confidence"])
 
-                self.results_text.insert(tk.END, "  • ", f"item_{key}")
-                self.results_text.insert(tk.END, item["text"] + "\n", f"item_{key}")
-                self.results_text.insert(
-                    tk.END,
-                    f"         {conf_label}{bar}\n",
-                    f"conf_{key}",
-                )
+                var = tk.BooleanVar()
+                var.trace_add("write", self._update_progress)
+                self.check_vars.append((var, key, item["text"]))
+                self._result_items.append((key, item["text"]))
 
-                # Show runner-up scores so users can see why a line landed here
+                row = tk.Frame(self.checklist_frame, bg=bg)
+                row.pack(fill="x", padx=12, pady=(2, 0))
+
+                cb = tk.Checkbutton(row, variable=var, bg=bg, activebackground=bg,
+                                    relief="flat", bd=0, highlightthickness=0)
+                cb.pack(side="left", anchor="nw", pady=2)
+                cb.bind("<MouseWheel>", self._on_mousewheel)
+
+                tl = tk.Label(row, text=item["text"], fg=text_main, bg=bg,
+                              font=("Consolas", 10), anchor="w", justify="left", wraplength=340)
+                tl.pack(side="left", anchor="nw", pady=2)
+                tl.bind("<MouseWheel>", self._on_mousewheel)
+
+                conf_row = tk.Frame(self.checklist_frame, bg=bg)
+                conf_row.pack(fill="x", padx=38, pady=(0, 2))
+
+                cl = tk.Label(conf_row, text=f"{conf_label}{bar}", fg=meta["color"],
+                              bg=bg, font=("Consolas", 9), anchor="w")
+                cl.pack(anchor="w")
+                cl.bind("<MouseWheel>", self._on_mousewheel)
+
                 if item["all_scores"] and not is_rule:
-                    sorted_scores = sorted(
-                        item["all_scores"].items(), key=lambda x: x[1], reverse=True
-                    )
+                    sorted_scores = sorted(item["all_scores"].items(), key=lambda x: x[1], reverse=True)
                     for rank, (bk, sc) in enumerate(sorted_scores[:3]):
                         marker = "▶" if rank == 0 else " "
                         label = BUCKETS[bk]["display"] if bk in BUCKETS else bk
-                        self.results_text.insert(
-                            tk.END,
-                            f"           {marker} {label}: {int(sc * 100)}%\n",
-                            f"conf_{key}",
-                        )
+                        rl = tk.Label(conf_row, text=f"  {marker} {label}: {int(sc * 100)}%",
+                                      fg=meta["color"], bg=bg, font=("Consolas", 9), anchor="w")
+                        rl.pack(anchor="w")
+                        rl.bind("<MouseWheel>", self._on_mousewheel)
 
-        # Unclassified
         unclassified = buckets.get("unclassified", [])
         if unclassified:
             any_output = True
-            self.results_text.insert(tk.END, "\nOther / Unclassified\n", "unclassified_header")
-            self.results_text.insert(tk.END, "─" * 52 + "\n", "rule")
+            tk.Label(self.checklist_frame, text="Other / Unclassified", fg="#888",
+                     bg=bg, font=("Segoe UI", 11, "bold"), anchor="w").pack(
+                fill="x", padx=12, pady=(10, 0))
+            tk.Frame(self.checklist_frame, bg="#dbe3ef", height=1).pack(fill="x", padx=12, pady=(2, 4))
+
             for item in unclassified:
-                self.results_text.insert(tk.END, f"  • {item['text']}\n", "unclassified_item")
+                var = tk.BooleanVar()
+                var.trace_add("write", self._update_progress)
+                self.check_vars.append((var, "unclassified", item["text"]))
+                self._result_items.append(("unclassified", item["text"]))
+
+                row = tk.Frame(self.checklist_frame, bg=bg)
+                row.pack(fill="x", padx=12, pady=(2, 0))
+
+                cb = tk.Checkbutton(row, variable=var, bg=bg, activebackground=bg,
+                                    relief="flat", bd=0, highlightthickness=0)
+                cb.pack(side="left", anchor="nw", pady=2)
+                cb.bind("<MouseWheel>", self._on_mousewheel)
+
+                tl = tk.Label(row, text=item["text"], fg="#888", bg=bg,
+                              font=("Consolas", 10), anchor="w", justify="left", wraplength=340)
+                tl.pack(side="left", anchor="nw", pady=2)
+                tl.bind("<MouseWheel>", self._on_mousewheel)
+
                 pct = int(item["confidence"] * 100)
-                self.results_text.insert(
-                    tk.END,
-                    f"         [best score was only {pct}% — below threshold]\n",
-                    "unclassified_item",
-                )
+                cl = tk.Label(self.checklist_frame,
+                              text=f"  [best score was only {pct}% — below threshold]",
+                              fg="#888", bg=bg, font=("Consolas", 9), anchor="w")
+                cl.pack(fill="x", padx=38)
+                cl.bind("<MouseWheel>", self._on_mousewheel)
 
         if not any_output:
-            self.results_text.insert(tk.END, "No clear requirements detected.", "loading")
+            tk.Label(self.checklist_frame, text="No clear requirements detected.",
+                     fg="#555", bg=bg, font=("Segoe UI", 11, "italic")).pack(padx=12, pady=12)
 
-        self.results_text.configure(state="disabled")
+        tk.Frame(self.checklist_frame, bg=bg, height=12).pack(fill="x")
+        self.checklist_frame.update_idletasks()
+        self.results_canvas.configure(scrollregion=self.results_canvas.bbox("all"))
+        self._update_progress()
 
     @staticmethod
     def _conf_bar(score: float, width: int = 18) -> str:
@@ -901,10 +963,13 @@ class RubricHelperApp:
         self.analyze_btn.state(["disabled"])
         self.progress.start(10)
 
-        self.results_text.configure(state="normal")
-        self.results_text.delete("1.0", tk.END)
-        self.results_text.insert(tk.END, "Running NLI classification…\n", "loading")
-        self.results_text.configure(state="disabled")
+        for w in self.checklist_frame.winfo_children():
+            w.destroy()
+        self.check_vars = []
+        self._result_items = []
+        self.progress_var.set("")
+        tk.Label(self.checklist_frame, text="Running NLI classification…",
+                 fg="#555", bg="#f8fafc", font=("Segoe UI", 11, "italic")).pack(padx=12, pady=12)
         self.root.update()
 
         def run():
@@ -926,12 +991,31 @@ class RubricHelperApp:
         self.input_text.configure(fg="#0f172a")
         self.input_placeholder_active = False
         self._set_placeholder()
-        self.results_text.configure(state="normal")
-        self.results_text.delete("1.0", tk.END)
-        self.results_text.configure(state="disabled")
+        for w in self.checklist_frame.winfo_children():
+            w.destroy()
+        self.check_vars = []
+        self._result_items = []
+        self.progress_var.set("")
 
     def _get_results_content(self) -> str:
-        return self.results_text.get("1.0", tk.END).strip()
+        if not self._result_items:
+            return ""
+        lines = []
+        current_bucket = None
+        for key, text in self._result_items:
+            if key != current_bucket:
+                if current_bucket is not None:
+                    lines.append("")
+                bucket_label = BUCKETS[key]["display"] if key in BUCKETS else "Other / Unclassified"
+                lines.append(bucket_label)
+                lines.append("─" * 52)
+                current_bucket = key
+            checked = next(
+                ("☑" if var.get() else "☐" for var, vk, vt in self.check_vars if vk == key and vt == text),
+                "☐",
+            )
+            lines.append(f"  {checked} {text}")
+        return "\n".join(lines)
 
     def _copy_results(self):
         text = self._get_results_content()
